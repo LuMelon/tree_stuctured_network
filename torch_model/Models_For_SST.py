@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from functools import reduce
 
 class TreeLSTM_2ary(nn.Module):
 
@@ -61,9 +62,13 @@ class TreeLSTM_2ary(nn.Module):
         return loss
 
     def computeLoss(self, tree):
-
-
-        return
+        loss = torch.tensor(0.0)
+        nodes = tree.tree.nodes
+        nodes_idx = list(nodes)
+        for node in nodes_idx:
+            loss += torch.log(nodes[node]['prob'])
+        loss *= ( 1.0/len(nodes_idx) )
+        return loss
 
     def PredictUpTree(self, tree):
         def PredictUpNode(node_h):
@@ -80,8 +85,9 @@ class TreeLSTM_2ary(nn.Module):
 
     def init_tree(self, tree):
         nodes = tree.tree.nodes
+        nodes_idx = list(nodes)
         out_degree = tree.tree.out_degree()
-        for node in nodes:
+        for node in nodes_idx:
             nodes[node]['node_h'] = self.init_vector([self.hiddendim])
             nodes[node]['cell'] = self.init_vector([self.hiddendim])
             if out_degree[node] == 0: #leaf node has been initialized in SetWordVecMatrix
@@ -109,8 +115,10 @@ class TreeLSTM_2ary(nn.Module):
         for layer in layers[1:]:
             for node in layer:
                 if out_degrees[node] != 0:
-                    
-
+                    childs = list(tree.tree.neighbors(node))
+                    node_h, node_cell = self.recursive_unit(tree_nodes[node]['word'], [tree_nodes[child]['node_h'] for child in childs], [tree_nodes[child]['cell'] for child in childs])
+                    tree_nodes[node]['node_h'] = node_h
+                    tree_nodes[node]['cell'] = node_cell
         return
 
     def init_vector(self, shape):
@@ -122,3 +130,9 @@ class TreeLSTM_2ary(nn.Module):
     def SetWordVecMatrix(self, words, word2id):
         self.Words = nn.parameter.Parameter(words)
         self.words_to_idx = word2id
+
+    def batch_training(self, trees):
+        cnt = len(trees)
+        loss = (1.0/cnt) * reduce(lambda a,b:a+b, map(lambda tree: self.forward(tree), trees))
+        return loss
+
