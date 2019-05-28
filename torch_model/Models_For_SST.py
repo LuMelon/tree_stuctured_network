@@ -62,6 +62,7 @@ class TreeLSTM_2ary(nn.Module):
 
     def computeLoss(self, tree):
 
+
         return
 
     def PredictUpTree(self, tree):
@@ -79,17 +80,36 @@ class TreeLSTM_2ary(nn.Module):
 
     def init_tree(self, tree):
         nodes = tree.tree.nodes
+        out_degree = tree.tree.out_degree()
         for node in nodes:
             nodes[node]['node_h'] = self.init_vector([self.hiddendim])
             nodes[node]['cell'] = self.init_vector([self.hiddendim])
+            if out_degree[node] == 0: #leaf node has been initialized in SetWordVecMatrix
+                nodes[node]['word'] = self.Words[ self.words_to_idx[ nodes[node]['data'] ] ]
+            else:
+                nodes[node]['word']= nn.parameter.Parameter(torch.randn(self.hiddendim))
         return
 
     def computeTree(self, tree):
-        leaf_nodes = tree.LeafNodes()
+        tree_nodes = tree.tree.nodes
         def handle_leaf_node(leaf):
-
-            leaf_h, leaf_cell = self.recursive_unit()
+            word = tree_nodes[leaf]['word']
+            leaf_h, leaf_cell = self.recursive_unit(word, torch.zeros([self.degree, self.hiddendim]), torch.zeros([self.degree, self.hiddendim]))
+            tree_nodes[leaf]['node_h'] = leaf_h
+            tree_nodes[leaf]['cell'] = leaf_cell
             return
+
+        leaf_nodes = tree.LeafNodes()
+        for leaf in list(leaf_nodes):
+            handle_leaf_node(leaf)
+
+        out_degrees = tree.tree.out_degree()
+        layers = tree.get_layers()
+        layers.reverse()
+        for layer in layers[1:]:
+            for node in layer:
+                if out_degrees[node] != 0:
+                    
 
         return
 
@@ -99,5 +119,6 @@ class TreeLSTM_2ary(nn.Module):
     def init_matrix(self, shape):
         return  torch.from_numpy(np.random.normal(scale=0.1, size=shape))
 
-    def initWordVecMatrix(self, words):
+    def SetWordVecMatrix(self, words, word2id):
         self.Words = nn.parameter.Parameter(words)
+        self.words_to_idx = word2id
